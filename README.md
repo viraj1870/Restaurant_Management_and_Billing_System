@@ -4,6 +4,8 @@ Web app for running a restaurant: menu, orders, kitchen, billing, payments, coup
 
 **Stack:** Java 21, Spring Boot 3, Spring Data JPA, Spring Security (JWT + BCrypt), MySQL, HTML/CSS/JS, Bootstrap 5.
 
+**Live demo:** https://restobill.onrender.com (free hosting: the first visit after 15 minutes of no visitors takes about 1 minute while the server wakes up; demo data resets on restart)
+
 **Repository:** https://github.com/viraj1870/Restaurant_Management_and_Billing_System
 
 **Main file:** [`RestaurantManagementApplication.java`](src/main/java/com/restaurant/rms/RestaurantManagementApplication.java). Run it and open http://localhost:8080.
