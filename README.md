@@ -18,11 +18,11 @@ cd Restaurant_Management_and_Billing_System
 
 ### With MySQL (default)
 1. Start MySQL (`MySQL80` service). The `restaurant_db` database is created automatically.
-2. Set your credentials (defaults: `root` / `root`):
+2. Run the helper script. It asks for your MySQL password with hidden input and never saves it:
    ```powershell
-   $env:DB_USERNAME="root"; $env:DB_PASSWORD="your_password"
-   .\mvnw.cmd spring-boot:run
+   .\run-local.ps1
    ```
+   You can also set `DB_USERNAME` / `DB_PASSWORD` environment variables yourself and run `.\mvnw.cmd spring-boot:run`.
 ### Without MySQL (H2 file database)
 ```powershell
 .\mvnw.cmd spring-boot:run "-Dspring-boot.run.profiles=h2"

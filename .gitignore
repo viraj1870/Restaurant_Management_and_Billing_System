@@ -5,3 +5,9 @@ data/
 *.iml
 .vscode/
 .env
+
+# Local secrets - never commit
+application-local.properties
+*.env
+.env.*
+secrets/
