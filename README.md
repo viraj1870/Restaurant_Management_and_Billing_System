@@ -4,6 +4,16 @@ Web app for running a restaurant: menu, orders, kitchen, billing, payments, coup
 
 **Stack:** Java 21, Spring Boot 3, Spring Data JPA, Spring Security (JWT + BCrypt), MySQL, HTML/CSS/JS, Bootstrap 5.
 
+**Repository:** https://github.com/viraj1870/Restaurant_Management_and_Billing_System
+
+**Main file:** [`RestaurantManagementApplication.java`](src/main/java/com/restaurant/rms/RestaurantManagementApplication.java). Run it and open http://localhost:8080.
+
+```powershell
+git clone https://github.com/viraj1870/Restaurant_Management_and_Billing_System.git
+cd Restaurant_Management_and_Billing_System
+.\mvnw.cmd spring-boot:run "-Dspring-boot.run.profiles=h2"   # quick start, no MySQL needed
+```
+
 ## Run
 
 ### With MySQL (default)
