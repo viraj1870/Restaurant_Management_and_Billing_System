@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Order - RestoBill</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+    <link href="/css/style.css" rel="stylesheet">
+</head>
+<body>
+<main class="container py-4" style="max-width:960px">
+    <div id="newAlert" class="alert alert-success d-none no-print"><i class="bi bi-check-circle"></i> Order placed successfully! Track its status below.</div>
+    <div id="content"><div class="text-center py-5"><div class="spinner-border text-secondary"></div></div></div>
+</main>
+
+<!-- Payment modal -->
+<div class="modal fade" id="payModal" tabindex="-1">
+    <div class="modal-dialog"><div class="modal-content">
+        <div class="modal-header"><h5 class="modal-title"><i class="bi bi-credit-card"></i> Pay <span id="payAmount"></span></h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+        <form id="payForm">
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label class="form-label">Payment method</label>
+                    <select name="method" id="payMethod" class="form-select"></select>
+                </div>
+                <div class="pm pm-CARD">
+                    <label class="form-label">Card number</label>
+                    <input name="cardNumber" class="form-control" inputmode="numeric" maxlength="19" placeholder="4111 1111 1111 1111" autocomplete="off">
+                    <div class="form-text">Sandbox: 4111 1111 1111 1111 succeeds, 4000 0000 0000 0002 is declined.</div>
+                </div>
+                <div class="pm pm-UPI d-none">
+                    <label class="form-label">UPI ID</label>
+                    <input name="upiId" class="form-control" placeholder="name@okbank">
+                    <div class="form-text">Sandbox: IDs starting with "fail" are declined.</div>
+                </div>
+                <div class="pm pm-NET_BANKING d-none">
+                    <label class="form-label">Bank</label>
+                    <select name="bankCode" class="form-select">
+                        <option value="SBI">State Bank of India</option><option value="HDFC">HDFC Bank</option>
+                        <option value="ICICI">ICICI Bank</option><option value="AXIS">Axis Bank</option>
+                        <option value="FAIL">Test bank (declines)</option>
+                    </select>
+                </div>
+                <div class="pm pm-CASH d-none"><div class="alert alert-info small mb-0" id="cashNote"></div></div>
+            </div>
+            <div class="modal-footer"><button class="btn btn-brand w-100" type="submit" id="payBtn">Pay now</button></div>
+        </form>
+    </div></div>
+</div>
+
+<!-- Feedback modal -->
+<div class="modal fade" id="fbModal" tabindex="-1">
+    <div class="modal-dialog"><div class="modal-content">
+        <div class="modal-header"><h5 class="modal-title" id="fbTitle">Rate your order</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+        <div class="modal-body">
+            <div id="ratingWrap" class="text-center mb-3 star-input">
+                <i class="bi bi-star-fill" data-v="1"></i><i class="bi bi-star-fill" data-v="2"></i><i class="bi bi-star-fill" data-v="3"></i><i class="bi bi-star-fill" data-v="4"></i><i class="bi bi-star-fill" data-v="5"></i>
+            </div>
+            <textarea id="fbComment" class="form-control" rows="4" maxlength="1000" placeholder="Share your experience"></textarea>
+        </div>
+        <div class="modal-footer"><button class="btn btn-brand" id="fbSubmit">Submit</button></div>
+    </div></div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script src="/js/app.js"></script>
+<script>
+    const user = App.requireRole('CUSTOMER', 'MERCHANT', 'KITCHEN');
+    App.renderNav(user.role === 'CUSTOMER' ? '/orders.html' : '');
+    const { esc, money } = App;
+    const params = new URLSearchParams(location.search);
+    const id = Number(params.get('id'));
+    if (params.get('new')) document.getElementById('newAlert').classList.remove('d-none');
+    let order, rating = 0, fbType = 'REVIEW', pollTimer;
+    const payModal = new bootstrap.Modal('#payModal');
+    const fbModal = new bootstrap.Modal('#fbModal');
+
+    async function load() {
+        try {
+            // Kitchen staff cannot view receipts, so they get the plain order view.
+            const receipt = user.role === 'KITCHEN'
+                ? { order: await App.api('/api/orders/' + id), payments: [], restaurant: null }
+                : await App.api(`/api/orders/${id}/receipt`);
+            order = receipt.order;
+            render(receipt);
+            clearTimeout(pollTimer);
+            if (['PENDING', 'PREPARING', 'READY'].includes(order.status) || order.paymentStatus === 'PENDING') {
+                pollTimer = setTimeout(load, 10000);
+            }
+        } catch (e) {
+            document.getElementById('content').innerHTML = `<div class="alert alert-danger">${esc(e.message)}</div>`;
+        }
+    }
+
+    function tracker(o) {
+        if (o.status === 'CANCELLED') return '<div class="alert alert-secondary text-center"><i class="bi bi-x-circle"></i> This order was cancelled.</div>';
+        const steps = [['PENDING', 'Placed', 'receipt'], ['PREPARING', 'Preparing', 'fire'], ['READY', 'Ready', 'bell'], ['COMPLETED', 'Completed', 'check2-all']];
+        const idx = steps.findIndex(s => s[0] === o.status);
+        return `<div class="tracker no-print">${steps.map((s, i) => `<div class="step ${i <= idx ? 'done' : ''}">
+            <div class="dot"><i class="bi bi-${s[2]}"></i></div>${s[1]}</div>`).join('')}</div>`;
+    }
+
+    function render(rc) {
+        const o = rc.order, r = rc.restaurant;
+        const isCustomer = user.role === 'CUSTOMER';
+        const canPay = (isCustomer || user.role === 'MERCHANT') && o.status !== 'CANCELLED' && o.paymentStatus !== 'PAID' && o.paymentStatus !== 'REFUNDED';
+        const actions = [];
+        if (canPay) actions.push(`<button class="btn btn-brand" onclick="openPay()"><i class="bi bi-credit-card"></i> ${user.role === 'MERCHANT' ? 'Record payment' : (o.paymentStatus === 'PENDING' ? 'Pay online instead' : 'Pay now')}</button>`);
+        if (isCustomer && o.status === 'PENDING') actions.push(`<button class="btn btn-outline-danger" onclick="cancelOrder()"><i class="bi bi-x-circle"></i> Cancel order</button>`);
+        if (isCustomer && o.status === 'COMPLETED' && !o.feedbackGiven) actions.push(`<button class="btn btn-success" onclick="openFeedback('REVIEW')"><i class="bi bi-star"></i> Rate &amp; review</button>`);
+        if (isCustomer) actions.push(`<button class="btn btn-outline-secondary" onclick="openFeedback('COMPLAINT')"><i class="bi bi-exclamation-triangle"></i> Raise complaint</button>`);
+        if (r) actions.push(`<button class="btn btn-outline-dark" onclick="window.print()"><i class="bi bi-printer"></i> Print receipt</button>`);
+
+        document.getElementById('content').innerHTML = `
+          <div class="card mb-3"><div class="card-body">
+            <div class="d-flex justify-content-between flex-wrap gap-2">
+              <div><h4 class="mb-0">Order #${esc(o.orderNumber)}</h4><div class="text-muted small">${App.dt(o.createdAt)} &middot; ${App.label(o.orderType)}${o.tableNumber ? ' &middot; Table ' + esc(o.tableNumber) : ''}</div></div>
+              <div class="text-end">${App.statusBadge(o.status)} ${App.payBadge(o.paymentStatus)}</div>
+            </div>
+            ${tracker(o)}
+            ${o.paymentStatus === 'PENDING' ? '<div class="alert alert-warning small no-print mb-0"><i class="bi bi-cash"></i> Pay-at-counter requested. Please pay at the counter, or pay online now.</div>' : ''}
+          </div></div>
+
+          <div class="card mb-3"><div class="card-body" id="receipt">
+            ${r ? `<div class="text-center mb-3"><h4 class="mb-0">${esc(r.name)}</h4>
+              <div class="small text-muted">${esc(r.address || '')}${r.phone ? ' &middot; Ph: ' + esc(r.phone) : ''}</div>
+              ${r.gstNumber ? `<div class="small text-muted">GSTIN: ${esc(r.gstNumber)}</div>` : ''}
+              <div class="fw-semibold mt-2">TAX INVOICE / RECEIPT</div></div>` : ''}
+            <div class="d-flex justify-content-between small mb-2"><span>Customer: <strong>${esc(o.customerName)}</strong> (${esc(o.customerMobile)})</span><span>Bill No: ${esc(o.orderNumber)}</span></div>
+            <table class="table table-sm">
+              <thead><tr><th>Item</th><th class="text-center">Qty</th><th class="text-end">Rate</th><th class="text-end">Amount</th></tr></thead>
+              <tbody>${o.items.map(i => `<tr><td>${esc(i.itemName)}</td><td class="text-center">${i.quantity}</td><td class="text-end">${money(i.unitPrice)}</td><td class="text-end">${money(i.lineTotal)}</td></tr>`).join('')}</tbody>
+              <tfoot>
+                <tr><td colspan="3" class="text-end">Subtotal</td><td class="text-end">${money(o.subtotal)}</td></tr>
+                ${Number(o.couponDiscount) > 0 ? `<tr class="text-success"><td colspan="3" class="text-end">Coupon discount (${esc(o.couponCode)})</td><td class="text-end">- ${money(o.couponDiscount)}</td></tr>` : ''}
+                ${Number(o.loyaltyDiscount) > 0 ? `<tr class="text-success"><td colspan="3" class="text-end">Loyalty points (${o.loyaltyPointsRedeemed})</td><td class="text-end">- ${money(o.loyaltyDiscount)}</td></tr>` : ''}
+                <tr><td colspan="3" class="text-end">Tax / GST (${Number(o.taxPercent)}%)</td><td class="text-end">${money(o.taxAmount)}</td></tr>
+                <tr class="fw-bold fs-5"><td colspan="3" class="text-end">Grand total</td><td class="text-end">${money(o.totalAmount)}</td></tr>
+              </tfoot>
+            </table>
+            ${o.specialInstructions ? `<p class="small"><strong>Instructions:</strong> ${esc(o.specialInstructions)}</p>` : ''}
+            ${o.loyaltyPointsEarned ? `<p class="small text-success"><i class="bi bi-gift"></i> ${o.loyaltyPointsEarned} loyalty points earned on this order.</p>` : ''}
+            ${rc.payments && rc.payments.length ? `<h6 class="mt-3">Payments</h6>
+              <table class="table table-sm small"><thead><tr><th>Date</th><th>Method</th><th>Ref</th><th>Status</th><th class="text-end">Amount</th></tr></thead>
+              <tbody>${rc.payments.map(p => `<tr><td>${App.dt(p.createdAt)}</td><td>${App.label(p.method)}</td><td><code>${esc(p.transactionRef || '-')}</code></td>
+                <td>${esc(App.label(p.status))}${p.failureReason ? `<div class="text-danger">${esc(p.failureReason)}</div>` : ''}</td><td class="text-end">${money(p.amount)}</td></tr>`).join('')}</tbody></table>` : ''}
+            ${r ? '<p class="text-center small text-muted mt-3 mb-0">Thank you! Visit again.</p>' : ''}
+          </div></div>
+          <div class="d-flex gap-2 flex-wrap no-print">${actions.join('')}</div>`;
+    }
+
+    window.openPay = () => {
+        const methods = user.role === 'MERCHANT' ? ['CASH', 'CARD', 'UPI'] : ['CARD', 'UPI', 'NET_BANKING', ...(order.paymentStatus === 'PENDING' ? [] : ['CASH'])];
+        const sel = document.getElementById('payMethod');
+        sel.innerHTML = methods.map(m => `<option value="${m}">${m === 'CASH' && user.role === 'CUSTOMER' ? 'Pay at counter (cash)' : App.label(m)}</option>`).join('');
+        document.getElementById('payAmount').textContent = money(order.totalAmount);
+        document.getElementById('cashNote').textContent = user.role === 'MERCHANT'
+            ? 'Payment collected at the counter will be marked as paid.' : 'Your order will be marked as "pay at counter". Staff will confirm once you pay.';
+        sel.onchange = () => {
+            document.querySelectorAll('.pm').forEach(el => el.classList.add('d-none'));
+            const merchantCounter = user.role === 'MERCHANT';
+            document.querySelector('.pm-' + (merchantCounter ? 'CASH' : sel.value)).classList.remove('d-none');
+        };
+        sel.onchange();
+        payModal.show();
+    };
+
+    document.getElementById('payForm').onsubmit = async (e) => {
+        e.preventDefault();
+        const d = App.formData(e.target);
+        const body = { method: d.method };
+        if (user.role === 'CUSTOMER') {
+            if (d.method === 'CARD') body.cardNumber = d.cardNumber;
+            if (d.method === 'UPI') body.upiId = d.upiId;
+            if (d.method === 'NET_BANKING') body.bankCode = d.bankCode;
+        }
+        const btn = document.getElementById('payBtn');
+        btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Processing...';
+        try {
+            const p = await App.api(`/api/orders/${id}/payments`, { method: 'POST', body });
+            if (p.status === 'SUCCESS') App.toast('Payment successful! Ref: ' + p.transactionRef);
+            else if (p.status === 'PENDING') App.toast('Pay-at-counter requested', 'info');
+            else App.toast('Payment failed: ' + (p.failureReason || 'unknown'), 'danger');
+            payModal.hide();
+            e.target.reset();
+            load();
+        } catch (err) { App.error(err); }
+        finally { btn.disabled = false; btn.textContent = 'Pay now'; }
+    };
+
+    window.cancelOrder = async () => {
+        if (!confirm('Cancel this order?')) return;
+        try { await App.api(`/api/orders/${id}/cancel`, { method: 'POST' }); App.toast('Order cancelled'); load(); }
+        catch (e) { App.error(e); }
+    };
+
+    const starEls = document.querySelectorAll('#ratingWrap i');
+    const paintStars = () => starEls.forEach(s => s.classList.toggle('active', Number(s.dataset.v) <= rating));
+    starEls.forEach(s => s.onclick = () => { rating = Number(s.dataset.v); paintStars(); });
+
+    window.openFeedback = (type) => {
+        fbType = type; rating = 0; paintStars();
+        document.getElementById('fbComment').value = '';
+        document.getElementById('ratingWrap').classList.toggle('d-none', type !== 'REVIEW');
+        document.getElementById('fbTitle').textContent = type === 'REVIEW' ? 'Rate your order' : 'Raise a complaint';
+        fbModal.show();
+    };
+    document.getElementById('fbSubmit').onclick = async () => {
+        if (fbType === 'REVIEW' && !rating) { App.toast('Please select a rating', 'warning'); return; }
+        try {
+            await App.api('/api/feedback', { method: 'POST', body: { orderId: id, type: fbType, rating: fbType === 'REVIEW' ? rating : null, comment: document.getElementById('fbComment').value } });
+            fbModal.hide();
+            App.toast(fbType === 'REVIEW' ? 'Thanks for your feedback!' : 'Complaint registered. The restaurant will respond soon.');
+            load();
+        } catch (e) { App.error(e); }
+    };
+
+    load();
+</script>
+</body>
+</html>

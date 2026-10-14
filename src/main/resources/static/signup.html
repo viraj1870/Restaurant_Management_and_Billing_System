@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Sign up - RestoBill</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+    <link href="/css/style.css" rel="stylesheet">
+</head>
+<body>
+<main class="container">
+    <div class="card auth-card" style="max-width:560px">
+        <div class="card-body p-4">
+            <h3 class="text-center mb-3"><i class="bi bi-person-plus text-brand"></i> Create account</h3>
+            <ul class="nav nav-pills nav-fill mb-4" role="tablist">
+                <li class="nav-item"><button class="nav-link active" data-role="customer" type="button"><i class="bi bi-person"></i> Customer</button></li>
+                <li class="nav-item"><button class="nav-link" data-role="merchant" type="button"><i class="bi bi-shop"></i> Merchant</button></li>
+            </ul>
+            <form id="signupForm" novalidate>
+                <div class="alert alert-danger d-none form-alert small"></div>
+                <div class="row g-3">
+                    <div class="col-12"><label class="form-label">Full name</label><input name="name" class="form-control" required maxlength="100"></div>
+                    <div class="col-md-6"><label class="form-label">Email</label><input name="email" type="email" class="form-control" required></div>
+                    <div class="col-md-6"><label class="form-label">Mobile</label><input name="mobile" class="form-control" required pattern="[6-9][0-9]{9}" maxlength="10" placeholder="10-digit number"></div>
+                    <div class="col-12">
+                        <label class="form-label">Password</label>
+                        <input name="password" type="password" class="form-control" required minlength="8" autocomplete="new-password">
+                        <div class="form-text">At least 8 characters with a letter and a digit.</div>
+                    </div>
+                    <div class="col-12 customer-only"><label class="form-label">Address (optional)</label><input name="address" class="form-control" maxlength="255"></div>
+                    <div class="col-12 customer-only">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" name="notificationConsent" id="consent" checked>
+                            <label class="form-check-label small" for="consent">Send me order &amp; payment updates by email/SMS</label>
+                        </div>
+                    </div>
+                    <div class="merchant-only d-none col-12"><hr class="my-1"><h6 class="text-muted mb-0">Restaurant details</h6></div>
+                    <div class="merchant-only d-none col-12"><label class="form-label">Restaurant name</label><input name="restaurantName" class="form-control" maxlength="150"></div>
+                    <div class="merchant-only d-none col-md-6"><label class="form-label">Cuisine</label><input name="cuisine" class="form-control" placeholder="e.g. Indian, Chinese"></div>
+                    <div class="merchant-only d-none col-md-6"><label class="form-label">Tax / GST %</label><input name="taxPercent" type="number" step="0.01" min="0" max="28" value="5" class="form-control"></div>
+                    <div class="merchant-only d-none col-12"><label class="form-label">Restaurant address</label><input name="restaurantAddress" class="form-control"></div>
+                </div>
+                <button class="btn btn-brand w-100 mt-4" type="submit"><i class="bi bi-check2-circle"></i> <span id="submitText">Sign up as Customer</span></button>
+            </form>
+            <hr>
+            <p class="text-center small mb-0">Already have an account? <a href="/login.html">Sign in</a></p>
+        </div>
+    </div>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script src="/js/app.js"></script>
+<script>
+    App.renderNav();
+    let role = new URLSearchParams(location.search).get('role') === 'merchant' ? 'merchant' : 'customer';
+    const form = document.getElementById('signupForm');
+    function setRole(r) {
+        role = r;
+        document.querySelectorAll('[data-role]').forEach(b => b.classList.toggle('active', b.dataset.role === r));
+        document.querySelectorAll('.merchant-only').forEach(el => el.classList.toggle('d-none', r !== 'merchant'));
+        document.querySelectorAll('.customer-only').forEach(el => el.classList.toggle('d-none', r !== 'customer'));
+        document.getElementById('submitText').textContent = r === 'merchant' ? 'Register Restaurant' : 'Sign up as Customer';
+    }
+    document.querySelectorAll('[data-role]').forEach(b => b.onclick = () => setRole(b.dataset.role));
+    setRole(role);
+
+    form.onsubmit = async (e) => {
+        e.preventDefault();
+        const d = App.formData(form);
+        let body;
+        if (role === 'merchant') {
+            body = { name: d.name, email: d.email, mobile: d.mobile, password: d.password, restaurantName: d.restaurantName,
+                cuisine: d.cuisine, restaurantAddress: d.restaurantAddress, taxPercent: d.taxPercent === '' ? null : Number(d.taxPercent) };
+        } else {
+            body = { name: d.name, email: d.email, mobile: d.mobile, password: d.password, address: d.address,
+                notificationConsent: d.notificationConsent };
+        }
+        const btn = form.querySelector('button[type=submit]');
+        btn.disabled = true;
+        try {
+            const auth = await App.api(`/api/auth/${role}/signup`, { method: 'POST', auth: false, body });
+            App.setSession(auth);
+            location.href = App.homeFor(auth.user.role);
+        } catch (err) {
+            App.showFormErrors(form, err);
+        } finally { btn.disabled = false; }
+    };
+</script>
+</body>
+</html>

@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Menu - RestoBill</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+    <link href="/css/style.css" rel="stylesheet">
+</head>
+<body>
+<main class="container-fluid px-lg-4 py-4">
+    <div id="header" class="mb-4"></div>
+    <div class="row g-4">
+        <div class="col-lg-8">
+            <div class="d-flex gap-2 mb-3 flex-wrap">
+                <input id="search" class="form-control" style="max-width:260px" placeholder="Search dishes">
+                <div class="btn-group" role="group">
+                    <input type="radio" class="btn-check" name="vegf" id="fAll" value="all" checked><label class="btn btn-outline-secondary" for="fAll">All</label>
+                    <input type="radio" class="btn-check" name="vegf" id="fVeg" value="veg"><label class="btn btn-outline-success" for="fVeg">Veg</label>
+                    <input type="radio" class="btn-check" name="vegf" id="fNon" value="nonveg"><label class="btn btn-outline-danger" for="fNon">Non-veg</label>
+                </div>
+            </div>
+            <div id="categoryNav" class="mb-3 d-flex gap-2 flex-wrap"></div>
+            <div id="menu"><div class="text-center py-5"><div class="spinner-border text-secondary"></div></div></div>
+            <div class="card mt-4"><div class="card-body"><h5><i class="bi bi-chat-quote text-brand"></i> Customer reviews</h5><div id="reviews" class="small text-muted">Loading...</div></div></div>
+        </div>
+        <div class="col-lg-4">
+            <div class="card cart-panel">
+                <div class="card-header bg-white"><h5 class="mb-0"><i class="bi bi-cart3 text-brand"></i> Your cart</h5></div>
+                <div class="card-body">
+                    <div id="cartItems" class="mb-3"></div>
+                    <div id="checkout" class="d-none">
+                        <div class="mb-2">
+                            <label class="form-label small mb-1">Order type</label>
+                            <select id="orderType" class="form-select form-select-sm">
+                                <option value="DINE_IN">Dine-in</option><option value="TAKEAWAY">Takeaway</option>
+                            </select>
+                        </div>
+                        <div class="mb-2" id="tableWrap"><input id="tableNumber" class="form-control form-control-sm" placeholder="Table number (optional)" maxlength="10"></div>
+                        <div class="mb-2"><textarea id="instructions" class="form-control form-control-sm" rows="2" maxlength="500" placeholder="Special instructions (optional)"></textarea></div>
+                        <div class="input-group input-group-sm mb-1">
+                            <input id="coupon" class="form-control text-uppercase" placeholder="Coupon code">
+                            <button class="btn btn-outline-secondary" id="applyCoupon">Apply</button>
+                        </div>
+                        <div id="couponMsg" class="small mb-2"></div>
+                        <div id="offers" class="small mb-2"></div>
+                        <div id="pointsWrap" class="mb-2 d-none">
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" id="usePoints">
+                                <label class="form-check-label small" for="usePoints" id="pointsLabel"></label>
+                            </div>
+                        </div>
+                        <table class="table table-sm small mb-2" id="bill"></table>
+                        <button class="btn btn-brand w-100" id="placeOrder"><i class="bi bi-bag-check"></i> Place order</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script src="/js/app.js"></script>
+<script>
+    App.renderNav('/restaurants.html');
+    const { esc, money } = App;
+    const params = new URLSearchParams(location.search);
+    const restaurantId = Number(params.get('restaurantId'));
+    const user = App.getUser();
+    const cartKey = 'rms_cart_' + restaurantId;
+    let menu = null, items = {}, cart = JSON.parse(localStorage.getItem(cartKey) || '{}'), appliedCoupon = '';
+    let previewTimer;
+
+    const saveCart = () => localStorage.setItem(cartKey, JSON.stringify(cart));
+
+    async function load() {
+        if (!restaurantId) { location.href = '/restaurants.html'; return; }
+        try {
+            menu = await App.api('/api/menu?restaurantId=' + restaurantId, { auth: false });
+        } catch (e) {
+            document.getElementById('menu').innerHTML = `<div class="alert alert-warning">${esc(e.message)}</div>`;
+            return;
+        }
+        const r = menu.restaurant;
+        document.title = r.name + ' - RestoBill';
+        document.getElementById('header').innerHTML = `
+          <div class="card"><div class="card-body d-flex justify-content-between flex-wrap gap-2">
+            <div><h3 class="mb-1">${esc(r.name)}</h3>
+              <div class="text-muted small">${esc(r.cuisine || '')} &middot; <i class="bi bi-geo-alt"></i> ${esc(r.address || '')}</div>
+              <div class="small mt-1">${esc(r.description || '')}</div></div>
+            <div class="text-end">
+              ${r.averageRating ? `<span class="badge bg-success fs-6"><i class="bi bi-star-fill"></i> ${r.averageRating}</span><div class="small text-muted">${r.ratingCount} ratings</div>` : ''}
+              ${r.acceptingOrders ? '' : '<div class="badge bg-danger mt-2">Not accepting orders now</div>'}
+            </div></div></div>`;
+        menu.categories.forEach(c => c.items.forEach(i => items[i.id] = i));
+        // Drop stale cart entries (removed / unavailable items)
+        Object.keys(cart).forEach(id => { if (!items[id]) delete cart[id]; });
+        saveCart();
+        document.getElementById('categoryNav').innerHTML = menu.categories.map(c =>
+            `<a href="#cat-${c.categoryId}" class="btn btn-sm btn-outline-dark">${esc(c.categoryName)}</a>`).join('');
+        renderMenu();
+        renderCart();
+        loadExtras();
+    }
+
+    function renderMenu() {
+        const q = document.getElementById('search').value.toLowerCase();
+        const vf = document.querySelector('input[name=vegf]:checked').value;
+        const html = menu.categories.map(c => {
+            const list = c.items.filter(i => i.name.toLowerCase().includes(q) || (i.description || '').toLowerCase().includes(q))
+                .filter(i => vf === 'all' || (vf === 'veg' ? i.vegetarian : !i.vegetarian));
+            if (!list.length) return '';
+            return `<h5 class="mt-4 mb-2" id="cat-${c.categoryId}">${esc(c.categoryName)}</h5>
+              <div class="row g-3">${list.map(i => `
+                <div class="col-md-6"><div class="card h-100"><div class="card-body d-flex gap-3">
+                  ${i.imageUrl ? `<img src="${esc(i.imageUrl)}" class="menu-item-img" alt="" onerror="this.remove()">` : ''}
+                  <div class="flex-grow-1">
+                    <div>${App.vegDot(i.vegetarian)} <strong>${esc(i.name)}</strong></div>
+                    <div class="small text-muted">${esc(i.description || '')}</div>
+                    <div class="d-flex justify-content-between align-items-center mt-2">
+                      <span class="fw-semibold">${money(i.price)}</span>
+                      ${cart[i.id] ? qtyControl(i.id) : `<button class="btn btn-sm btn-outline-success" onclick="add(${i.id})"><i class="bi bi-plus"></i> Add</button>`}
+                    </div>
+                  </div></div></div></div>`).join('')}</div>`;
+        }).join('');
+        document.getElementById('menu').innerHTML = html || '<p class="text-muted">No dishes match your search.</p>';
+    }
+
+    const qtyControl = (id) => `<div class="d-flex align-items-center gap-2">
+        <button class="btn btn-sm btn-outline-secondary qty-btn" onclick="change(${id},-1)"><i class="bi bi-dash"></i></button>
+        <span class="fw-semibold">${cart[id]}</span>
+        <button class="btn btn-sm btn-outline-secondary qty-btn" onclick="change(${id},1)"><i class="bi bi-plus"></i></button></div>`;
+
+    window.add = (id) => change(id, 1);
+    window.change = (id, d) => {
+        cart[id] = Math.min(50, (cart[id] || 0) + d);
+        if (cart[id] <= 0) delete cart[id];
+        saveCart(); renderMenu(); renderCart();
+    };
+
+    function cartPayload() {
+        return Object.entries(cart).map(([id, q]) => ({ menuItemId: Number(id), quantity: q }));
+    }
+
+    function renderCart() {
+        const entries = Object.entries(cart);
+        const box = document.getElementById('cartItems');
+        if (!entries.length) {
+            box.innerHTML = '<p class="text-muted small text-center my-4"><i class="bi bi-basket display-6 d-block"></i>Your cart is empty</p>';
+            document.getElementById('checkout').classList.add('d-none');
+            return;
+        }
+        box.innerHTML = entries.map(([id, q]) => `
+          <div class="d-flex justify-content-between align-items-center mb-2 small">
+            <div>${App.vegDot(items[id].vegetarian)} ${esc(items[id].name)}<div class="text-muted">${money(items[id].price)} x ${q}</div></div>
+            ${qtyControl(id)}
+          </div>`).join('');
+        document.getElementById('checkout').classList.remove('d-none');
+        if (!user || user.role !== 'CUSTOMER') {
+            document.getElementById('bill').innerHTML = '';
+            const sub = entries.reduce((s, [id, q]) => s + items[id].price * q, 0);
+            document.getElementById('bill').innerHTML = `<tr><td>Subtotal</td><td class="text-end">${money(sub)}</td></tr>`;
+            const btn = document.getElementById('placeOrder');
+            btn.innerHTML = '<i class="bi bi-box-arrow-in-right"></i> Sign in as customer to order';
+            btn.onclick = () => location.href = '/login.html?next=' + encodeURIComponent(location.pathname + location.search);
+            return;
+        }
+        clearTimeout(previewTimer);
+        previewTimer = setTimeout(preview, 250);
+    }
+
+    function orderBody(redeem) {
+        return {
+            restaurantId, items: cartPayload(), couponCode: appliedCoupon || null,
+            redeemPoints: redeem, orderType: document.getElementById('orderType').value,
+            tableNumber: document.getElementById('tableNumber').value, specialInstructions: document.getElementById('instructions').value
+        };
+    }
+
+    let lastPreview = null;
+    async function preview() {
+        if (!Object.keys(cart).length) return;
+        try {
+            const usePts = document.getElementById('usePoints').checked;
+            const p = await App.api('/api/orders/preview', { method: 'POST', body: orderBody(usePts ? 1_000_000 : 0) });
+            lastPreview = p;
+            const msg = document.getElementById('couponMsg');
+            msg.className = 'small mb-2 ' + (p.couponCode ? 'text-success' : 'text-danger');
+            msg.textContent = appliedCoupon ? (p.couponMessage || '') : '';
+            const pw = document.getElementById('pointsWrap');
+            pw.classList.toggle('d-none', p.availablePoints <= 0);
+            document.getElementById('pointsLabel').textContent =
+                `Use loyalty points (balance ${p.availablePoints}, up to ${p.maxRedeemablePoints} usable)`;
+            document.getElementById('bill').innerHTML = `
+              <tr><td>Subtotal</td><td class="text-end">${money(p.subtotal)}</td></tr>
+              ${Number(p.couponDiscount) > 0 ? `<tr class="text-success"><td>Coupon (${esc(p.couponCode)})</td><td class="text-end">- ${money(p.couponDiscount)}</td></tr>` : ''}
+              ${Number(p.loyaltyDiscount) > 0 ? `<tr class="text-success"><td>Loyalty (${p.loyaltyPointsRedeemed} pts)</td><td class="text-end">- ${money(p.loyaltyDiscount)}</td></tr>` : ''}
+              <tr><td>Tax (${Number(p.taxPercent)}%)</td><td class="text-end">${money(p.taxAmount)}</td></tr>
+              <tr class="fw-bold fs-6"><td>Total</td><td class="text-end">${money(p.totalAmount)}</td></tr>
+              <tr><td colspan="2" class="text-muted text-center"><i class="bi bi-gift"></i> You'll earn ${p.pointsToEarn} points on completion</td></tr>`;
+        } catch (e) { App.error(e); }
+    }
+
+    async function loadExtras() {
+        App.api(`/api/menu/${restaurantId}/reviews`, { auth: false }).then(list => {
+            document.getElementById('reviews').innerHTML = list.length ? list.map(f => `
+              <div class="border-bottom py-2"><div>${App.stars(f.rating)} <strong class="text-dark">${esc(f.customerName)}</strong>
+                <span class="text-muted">&middot; ${App.dateOnly(f.createdAt)}</span></div>
+                <div class="text-dark">${esc(f.comment || '')}</div>
+                ${f.merchantReply ? `<div class="ms-3 mt-1 fst-italic"><i class="bi bi-reply"></i> Restaurant: ${esc(f.merchantReply)}</div>` : ''}</div>`).join('')
+                : 'No reviews yet.';
+        }).catch(() => {});
+        App.api(`/api/menu/${restaurantId}/coupons`, { auth: false }).then(list => {
+            document.getElementById('offers').innerHTML = list.map(c =>
+                `<span class="badge text-bg-warning me-1 mb-1" role="button" title="${esc(c.description || '')}" onclick="useCoupon('${esc(c.code)}')"><i class="bi bi-tag"></i> ${esc(c.code)}</span>`).join('');
+        }).catch(() => {});
+    }
+
+    window.useCoupon = (code) => { document.getElementById('coupon').value = code; applyCoupon(); };
+    function applyCoupon() {
+        appliedCoupon = document.getElementById('coupon').value.trim().toUpperCase();
+        preview();
+    }
+    document.getElementById('applyCoupon').onclick = applyCoupon;
+    document.getElementById('usePoints').onchange = preview;
+    document.getElementById('orderType').onchange = (e) =>
+        document.getElementById('tableWrap').classList.toggle('d-none', e.target.value !== 'DINE_IN');
+    document.getElementById('search').oninput = renderMenu;
+    document.querySelectorAll('input[name=vegf]').forEach(r => r.onchange = renderMenu);
+
+    document.getElementById('placeOrder').onclick = async (e) => {
+        if (!user || user.role !== 'CUSTOMER') return;
+        const btn = e.currentTarget;
+        btn.disabled = true;
+        try {
+            const redeem = document.getElementById('usePoints').checked && lastPreview ? lastPreview.loyaltyPointsRedeemed : 0;
+            const body = orderBody(redeem);
+            if (lastPreview && !lastPreview.couponCode) body.couponCode = null;
+            const order = await App.api('/api/orders', { method: 'POST', body });
+            cart = {}; saveCart();
+            location.href = '/order.html?id=' + order.id + '&new=1';
+        } catch (err) { App.error(err); preview(); }
+        finally { btn.disabled = false; }
+    };
+
+    load();
+</script>
+</body>
+</html>

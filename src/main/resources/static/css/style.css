@@ -1,0 +1,90 @@
+:root {
+    --brand: #d9480f;
+    --brand-dark: #b03a0c;
+}
+
+body { background: #f8f9fa; min-height: 100vh; display: flex; flex-direction: column; }
+main { flex: 1; }
+
+.navbar-brand { font-weight: 700; letter-spacing: .3px; }
+.navbar-brand i { color: #ffd43b; }
+
+.btn-brand { background: var(--brand); border-color: var(--brand); color: #fff; }
+.btn-brand:hover, .btn-brand:focus { background: var(--brand-dark); border-color: var(--brand-dark); color: #fff; }
+.text-brand { color: var(--brand) !important; }
+
+.hero {
+    background: linear-gradient(135deg, rgba(217,72,15,.92), rgba(250,176,5,.85)),
+                url('https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=1600') center/cover;
+    color: #fff; padding: 5rem 0;
+}
+
+.card { border: 0; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+.card-hover { transition: transform .15s, box-shadow .15s; }
+.card-hover:hover { transform: translateY(-3px); box-shadow: 0 6px 18px rgba(0,0,0,.12); }
+
+.auth-card { max-width: 480px; margin: 3rem auto; }
+
+.veg-dot, .nonveg-dot {
+    display: inline-block; width: 14px; height: 14px; border: 2px solid; border-radius: 2px; position: relative; vertical-align: middle;
+}
+.veg-dot { border-color: #2b8a3e; }
+.nonveg-dot { border-color: #c92a2a; }
+.veg-dot::after, .nonveg-dot::after {
+    content: ''; position: absolute; width: 6px; height: 6px; border-radius: 50%; top: 2px; left: 2px;
+}
+.veg-dot::after { background: #2b8a3e; }
+.nonveg-dot::after { background: #c92a2a; }
+
+.menu-item-img { width: 84px; height: 84px; object-fit: cover; border-radius: .5rem; }
+.cart-panel { position: sticky; top: 80px; }
+.qty-btn { width: 30px; height: 30px; padding: 0; line-height: 1; }
+
+.status-PENDING { background: #ffe066 !important; color: #5c3c00 !important; }
+.status-PREPARING { background: #74c0fc !important; color: #0b3d63 !important; }
+.status-READY { background: #8ce99a !important; color: #1b4d23 !important; }
+.status-COMPLETED { background: #2b8a3e !important; color: #fff !important; }
+.status-CANCELLED { background: #868e96 !important; color: #fff !important; }
+.pay-UNPAID { background: #ffc9c9 !important; color: #862e2e !important; }
+.pay-PENDING { background: #ffe8cc !important; color: #7a4100 !important; }
+.pay-PAID { background: #b2f2bb !important; color: #1b4d23 !important; }
+.pay-REFUNDED { background: #dee2e6 !important; color: #343a40 !important; }
+
+.tracker { display: flex; justify-content: space-between; position: relative; margin: 1rem 0; }
+.tracker::before { content: ''; position: absolute; top: 15px; left: 8%; right: 8%; height: 3px; background: #dee2e6; z-index: 0; }
+.tracker .step { text-align: center; flex: 1; z-index: 1; font-size: .8rem; color: #868e96; }
+.tracker .step .dot {
+    width: 32px; height: 32px; border-radius: 50%; background: #dee2e6; color: #fff; margin: 0 auto .25rem;
+    display: flex; align-items: center; justify-content: center;
+}
+.tracker .step.done { color: #2b8a3e; font-weight: 600; }
+.tracker .step.done .dot { background: #2b8a3e; }
+
+.kitchen-col { min-height: 60vh; background: #eef1f4; border-radius: .5rem; padding: .75rem; }
+.kitchen-card { border-left: 5px solid #adb5bd; }
+.kitchen-card.PENDING { border-left-color: #fab005; }
+.kitchen-card.PREPARING { border-left-color: #1c7ed6; }
+.kitchen-card.READY { border-left-color: #2b8a3e; }
+
+.stat-card .icon { font-size: 2rem; opacity: .8; }
+.sidebar .nav-link { color: #495057; border-radius: .375rem; }
+.sidebar .nav-link.active { background: var(--brand); color: #fff; }
+.sidebar .nav-link:hover:not(.active) { background: #e9ecef; }
+
+.bar-chart { display: flex; align-items: flex-end; gap: 6px; height: 180px; padding-top: 10px; }
+.bar-chart .bar { flex: 1; background: var(--brand); border-radius: 4px 4px 0 0; position: relative; min-height: 2px; }
+.bar-chart .bar span { position: absolute; top: -18px; left: 50%; transform: translateX(-50%); font-size: .7rem; white-space: nowrap; }
+.bar-labels { display: flex; gap: 6px; }
+.bar-labels div { flex: 1; text-align: center; font-size: .7rem; color: #6c757d; }
+
+.star { color: #fab005; }
+.star-input i { font-size: 1.8rem; cursor: pointer; color: #ced4da; }
+.star-input i.active { color: #fab005; }
+
+#toast-container { position: fixed; top: 70px; right: 16px; z-index: 2000; }
+
+@media print {
+    .no-print, nav, footer { display: none !important; }
+    body { background: #fff; }
+    .card { box-shadow: none; }
+}
